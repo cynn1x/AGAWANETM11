@@ -1,0 +1,8 @@
+Flask
+flask-cors
+flask-jwt-extended
+werkzeug
+stripe
+smtplib
+email
+python-doten
