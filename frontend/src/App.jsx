@@ -14,7 +14,7 @@ import CreateEventWithTickets from './pages/CreateEventWithTickets';
 import Signup from './pages/Signup';
 import TicketsPage from './pages/TicketsPage';
 
-const stripePromise = loadStripe('pk_test_...'); 
+const stripePromise = loadStripe('pk_test_51RiFwE018awpSg5sfVM7S0gqjY4P0d3ruHSZBtPDS13zC4SnNAibpj4ht2q603Iq4lbGq5wFGiZ6sWa5kUm6lodU00nn4rJ5Ka'); 
 const theme = extendTheme({});
 
 function App() {

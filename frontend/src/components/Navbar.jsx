@@ -3,6 +3,8 @@ import { Box, Flex, Text, Button, Spacer, Icon } from '@chakra-ui/react';
 import { CgProfile } from 'react-icons/cg';
 import { Link } from 'react-router-dom';
 import {jwtDecode} from 'jwt-decode';
+import ThemeToggle from '../components/ThemeToggle';
+
 
 function Navbar() {
   let isAdmin = false;
@@ -57,6 +59,7 @@ function Navbar() {
           </Button>
         </Link>
       </Box>
+      <ThemeToggle />
     </Flex>
   );
 }

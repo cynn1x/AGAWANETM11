@@ -272,13 +272,13 @@ def create_full_event():
     current_user = get_jwt_identity()
     data = request.get_json()
 
-    current_user = get_jwt_identity()
     event_name = data.get('event_name')
     event_date = data.get('date')
     event_time = data.get('time')
     event_location = data.get('location')
     event_desc = data.get('description')
     event_image = data.get('image_url')
+    perk_description = data.get('perk_description')  # 🔧 New field
 
     zones_config = data.get('zones_config')
     pricing_config = data.get('pricing_config')
@@ -297,11 +297,15 @@ def create_full_event():
             if row['date'] == event_date:
                 return jsonify({'error': 'Event with this name and date already exists'}), 400
 
-        # Insert Event
+        # 🔧 Insert Event with perk_description
         cursor.execute(
-            'INSERT INTO Events (name, description, date, time, location, img_url) VALUES (?, ?, ?, ?, ?, ?)',
-            (event_name, event_desc, event_date, event_time, event_location, event_image)
+            '''
+            INSERT INTO Events (name, description, date, time, location, img_url, perk_description)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (event_name, event_desc, event_date, event_time, event_location, event_image, perk_description)
         )
+
         cursor.execute('SELECT event_id FROM Events WHERE name = ? ORDER BY event_id DESC LIMIT 1', (event_name,))
         result = cursor.fetchone()
         event_id = result[0] if result else None
@@ -439,11 +443,10 @@ def getUserTicks():
 @jwt_required()
 def transferTick():
     current_user = get_jwt_identity()
-    event_name = request.json.get('event')
+    ticket_id = request.json.get('ticket_id')
     transfer_username = request.json.get('transfer_username')
-    ticket_num = request.json.get("ticket_num")
 
-    if not event_name or not transfer_username or not ticket_num:
+    if not ticket_id or not transfer_username:
         return jsonify({'error': 'Missing required fields'}), 400
 
     try:
@@ -456,48 +459,33 @@ def transferTick():
         user = cursor.fetchone()
         if not user:
             return jsonify({'error': 'User not found.'}), 404
-
         user_id = user['user_id']
-
-        # Validate event
-        cursor.execute('SELECT * FROM Events WHERE name = ?', (event_name,))
-        event_info = cursor.fetchone()
-        if not event_info:
-            return jsonify({'error': 'There is no event by this name'}), 404
-
-        event_id = event_info['event_id']
 
         # Get recipient user
         cursor.execute('SELECT * FROM Users WHERE username = ?', (transfer_username,))
-        transfer_user_info = cursor.fetchone()
-        if not transfer_user_info:
+        recipient = cursor.fetchone()
+        if not recipient:
             return jsonify({'error': 'Recipient user does not exist'}), 404
+        recipient_id = recipient['user_id']
 
-        transfer_user_id = transfer_user_info['user_id']
-
-        # Get user's tickets for this event
+        # Check ticket ownership
         cursor.execute('''
-            SELECT t.ticketId
-            FROM Tickets t
-            JOIN ticket_assignments ta ON t.ticketId = ta.ticketId
-            WHERE ta.userId = ? AND t.eventId = ?
-        ''', (user_id, event_id))
-        tickets = cursor.fetchall()
+            SELECT * FROM ticket_assignments
+            WHERE ticketId = ? AND userId = ?
+        ''', (ticket_id, user_id))
+        assignment = cursor.fetchone()
+        if not assignment:
+            return jsonify({'error': 'You do not own this ticket.'}), 403
 
-        if not tickets or len(tickets) < ticket_num:
-            return jsonify({'error': 'You do not have enough tickets for this event.'}), 400
-
-        # Transfer the tickets
-        for i in range(ticket_num):
-            ticket_id = tickets[i]['ticketId']
-            cursor.execute('''
-                UPDATE ticket_assignments
-                SET userId = ?
-                WHERE ticketId = ?
-            ''', (transfer_user_id, ticket_id))
+        # Transfer the ticket
+        cursor.execute('''
+            UPDATE ticket_assignments
+            SET userId = ?
+            WHERE ticketId = ?
+        ''', (recipient_id, ticket_id))
 
         conn.commit()
-        return jsonify({'message': 'Tickets transferred successfully'}), 200
+        return jsonify({'message': 'Ticket transferred successfully'}), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -505,40 +493,6 @@ def transferTick():
     finally:
         conn.close()
 
-from flask import request, jsonify
-from werkzeug.security import generate_password_hash
-from flask_jwt_extended import create_access_token
-import sqlite3
-
-@app.route('/signup', methods=['POST'])
-def signup():
-    email = request.json.get('email')
-    username = request.json.get('username')
-    password = request.json.get('password')
-
-    if not email or not username or not password:
-        return jsonify({'error': 'All fields are required.'}), 400
-
-    hashed_password = generate_password_hash(password)
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    try:
-        cursor.execute(
-            'INSERT INTO Users (email, username, password_hash) VALUES (?, ?, ?)',
-            (email, username, hashed_password)
-        )
-        conn.commit()
-
-        return jsonify({'message': 'User created successfully! Please login.'}), 201
-
-    except sqlite3.IntegrityError:
-        return jsonify({'error': 'Username or email already exists.'}), 409
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        conn.close()
 
 
 
@@ -558,19 +512,25 @@ def getAvailTicks():
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        # Expire old holds
+        # Count user's reserved tickets for this event
         cursor.execute('''
             SELECT COUNT(*) FROM tickets
             WHERE status = 'RESERVED' AND reserved_by = ? AND eventId = ?
         ''', (current_user, event_id))
         user_reserved_count = cursor.fetchone()[0]
-        conn.commit()
 
-        cursor.execute('SELECT t.*, p.amount AS amount FROM Tickets t LEFT JOIN Pricing p ON t.price = p.priceCode WHERE t.eventId = ? AND t.status = ?', (event_id, 'AVAILABLE'))
+        # Get available seats, include perk_description
+        cursor.execute('''
+            SELECT t.*, p.amount AS amount, t.perk_description
+            FROM Tickets t
+            LEFT JOIN Pricing p ON t.price = p.priceCode
+            WHERE t.eventId = ? AND t.status = 'AVAILABLE'
+        ''', (event_id,))
         avail_seats = [dict(seat) for seat in cursor.fetchall()]
 
+        # Get taken seats, include perk_description
         cursor.execute('''
-            SELECT t.*, p.amount as price
+            SELECT t.*, p.amount AS price, t.perk_description
             FROM Tickets t
             LEFT JOIN Pricing p ON t.price = p.priceCode
             WHERE t.eventId = ? AND (t.status = 'RESERVED' OR t.status = 'SOLD')
@@ -583,12 +543,14 @@ def getAvailTicks():
             "taken_seats": taken_seats,
             "user_reserved_count": user_reserved_count
         }), 200
-
     except Exception as e:
+        import traceback
+        traceback.print_exc()  # <-- This will print the real error in your terminal
         return jsonify({"error": str(e)}), 500
 
     finally:
         conn.close()
+
 
 
 
@@ -731,7 +693,7 @@ def create_payment_intent():
             # You can attach metadata for tracking
             metadata={'user': current_user}
         )
-
+        print(payment_intent)
         # Return the clientSecret to the frontend
         return jsonify({
             'clientSecret': payment_intent.client_secret

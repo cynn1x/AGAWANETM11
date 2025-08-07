@@ -1,8 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Image, Text, VStack, Heading, LinkBox, Button } from '@chakra-ui/react';
+import {
+  Box,
+  Image,
+  Text,
+  VStack,
+  Heading,
+  LinkBox,
+  Button
+} from '@chakra-ui/react';
 import { Link } from 'react-router-dom';
 
-function EventCard({ id, name, date, time, location, imageUrl }) {
+function EventCard({ id, name, date, time, location, imageUrl, perkDescription }) {
   const [timeLeft, setTimeLeft] = useState('');
 
   useEffect(() => {
@@ -26,20 +34,19 @@ function EventCard({ id, name, date, time, location, imageUrl }) {
 
     const timerId = setInterval(updateTimer, 1000);
     return () => clearInterval(timerId);
-  }, [date, time]); 
+  }, [date, time]);
 
   return (
     <LinkBox as="article" w="full" borderWidth="1px" rounded="md" overflow="hidden" boxShadow="md">
       <VStack align="stretch">
-
         {imageUrl && (
           <Image
             borderRadius="md"
             src={imageUrl}
             alt={`Image for ${name}`}
             objectFit="cover"
-            w="500px"
-            h="200px" // 
+            w="100%"   // 👈 responsive width
+            h="200px"
           />
         )}
 
@@ -50,11 +57,28 @@ function EventCard({ id, name, date, time, location, imageUrl }) {
           <Text fontSize="sm">Time of event: {time}</Text>
           <Text fontSize="sm" color="red.500">{timeLeft}</Text>
 
+          {/* 🎁 Show the perk if present */}
+          {perkDescription && (
+            <Box
+              mt="2"
+              bg="green.600"
+              color="white"
+              px="3"
+              py="2"
+              borderRadius="md"
+              fontSize="sm"
+              fontWeight="bold"
+              textAlign="center"
+            >
+              🎁 Perk: {perkDescription}
+            </Box>
+          )}
+
           <Button
             colorScheme="blue"
             mt="4"
             as={Link}
-            to={`/events/${id}`} //Pass eventId in URL so i can use later
+            to={`/events/${id}`}
             aria-label={`Buy tickets for ${name}`}
           >
             Buy Tickets!
