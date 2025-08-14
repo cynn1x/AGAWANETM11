@@ -9,6 +9,7 @@ function EventsPage() {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
   useEffect(() => {
+    console.log(apiBaseUrl)
     fetch(`${apiBaseUrl}/events`)
       .then(response => response.json()) 
       .then(data => {
