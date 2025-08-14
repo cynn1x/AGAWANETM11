@@ -836,7 +836,7 @@ if __name__ == '__main__':
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.daemon = True  # Daemon means it stops when Flask stops
     scheduler_thread.start()
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5001, debug=True)
 
     
 

@@ -19,7 +19,7 @@ function ProfilePage() {
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
-        const response = await fetch('${apiBaseUrl}/getUserProfile', {
+        const response = await fetch(`${apiBaseUrl}/getUserProfile`, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('access_token')}`
@@ -50,7 +50,7 @@ function ProfilePage() {
     }
 
     try {
-      const response = await fetch('${apiBaseUrl}/changePWD', {
+      const response = await fetch(`${apiBaseUrl}/changePWD`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

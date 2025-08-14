@@ -112,7 +112,7 @@ function EventDetailPage() {
       const seat = rows.flat().find(seat => seat.id === id);
       if (!seat) throw new Error('Seat not found');
 
-      await fetch('${apiBaseUrl}/reserveTickets', {
+      await fetch(`${apiBaseUrl}/reserveTickets`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -141,7 +141,7 @@ function EventDetailPage() {
       const seat = rows.flat().find(seat => seat.id === id);
       if (!seat) throw new Error('Seat not found');
 
-      await fetch('${apiBaseUrl}/unreserveTickets');
+      await fetch(`${apiBaseUrl}/unreserveTickets`);
 
       setSelected(list => list.filter(item => item !== id));
       setSelectedSeats(list => list.filter(s => s.id !== id));

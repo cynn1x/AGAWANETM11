@@ -50,7 +50,7 @@ export default function CreateFullEventPage() {
     };
 
     try {
-      const res = await fetch('${apiBaseUrl}/create_full_event', {
+      const res = await fetch(`${apiBaseUrl}/create_full_event`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

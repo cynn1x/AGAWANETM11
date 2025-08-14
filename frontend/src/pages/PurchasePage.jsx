@@ -24,7 +24,7 @@ function TicketPurchaseModal({ isOpen, onClose, selectedSeats, totalAmount }) {
 
   useEffect(() => {
     if (isOpen && adjustedTotal > 0) {
-      fetch('${apiBaseUrl}/create-payment-intent', {
+      fetch(`${apiBaseUrl}/create-payment-intent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,7 +76,7 @@ function TicketPurchaseModal({ isOpen, onClose, selectedSeats, totalAmount }) {
           seats: filteredSeats.map(seat => ({ ticketId: seat.ticketId }))
         };
 
-        const res = await fetch('${apiBaseUrl}/complete-purchase', {
+        const res = await fetch(`${apiBaseUrl}/complete-purchase`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

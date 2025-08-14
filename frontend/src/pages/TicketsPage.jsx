@@ -17,7 +17,7 @@ function TicketsPage() {
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const response = await fetch('${apiBaseUrl}/getUserProfile', {
+        const response = await fetch(`${apiBaseUrl}/getUserProfile`, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('access_token')}`
@@ -48,7 +48,7 @@ function TicketsPage() {
     }
 
     try {
-      const response = await fetch('${apiBaseUrl}/transferTickets', {
+      const response = await fetch(`${apiBaseUrl}/transferTickets`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
