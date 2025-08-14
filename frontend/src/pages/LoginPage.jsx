@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import LoginPage, {
   Email, Password, Submit, Logo, Title, Footer
 } from '@react-login-page/page4';
@@ -8,6 +8,7 @@ const Login = () => {
   const [formKey, setFormKey] = useState(0);
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
+  console.log('env check', import.meta.env.PROD, import.meta.env.VITE_API_BASE_URL);
   const handleLogin = async () => {
     try {
       const response = await fetch(`${apiBaseUrl}/login`, {
