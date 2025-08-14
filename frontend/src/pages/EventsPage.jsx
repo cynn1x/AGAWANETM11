@@ -6,9 +6,10 @@ import ThemeToggle from '../components/ThemeToggle';
 
 function EventsPage() {
   const [events, setEvents] = useState([]);
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
   useEffect(() => {
-    fetch('http://localhost:5000/events')
+    fetch('${apiBaseUrl}/events')
       .then(response => response.json()) 
       .then(data => {
         const now = new Date().getTime();

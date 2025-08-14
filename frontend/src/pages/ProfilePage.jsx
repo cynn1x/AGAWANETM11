@@ -13,11 +13,13 @@ function ProfilePage() {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const toast = useToast();
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
 
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
-        const response = await fetch('http://localhost:5000/getUserProfile', {
+        const response = await fetch('${apiBaseUrl}/getUserProfile', {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('access_token')}`
@@ -48,7 +50,7 @@ function ProfilePage() {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/changePWD', {
+      const response = await fetch('${apiBaseUrl}/changePWD', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

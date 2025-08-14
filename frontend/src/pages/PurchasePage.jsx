@@ -13,6 +13,8 @@ function TicketPurchaseModal({ isOpen, onClose, selectedSeats, totalAmount }) {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [includePerks, setIncludePerks] = useState(true);
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
 
   // Compute final total based on opt-in
   const filteredSeats = includePerks
@@ -22,7 +24,7 @@ function TicketPurchaseModal({ isOpen, onClose, selectedSeats, totalAmount }) {
 
   useEffect(() => {
     if (isOpen && adjustedTotal > 0) {
-      fetch('http://localhost:5000/create-payment-intent', {
+      fetch('${apiBaseUrl}/create-payment-intent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -74,7 +76,7 @@ function TicketPurchaseModal({ isOpen, onClose, selectedSeats, totalAmount }) {
           seats: filteredSeats.map(seat => ({ ticketId: seat.ticketId }))
         };
 
-        const res = await fetch('http://localhost:5000/complete-purchase', {
+        const res = await fetch('${apiBaseUrl}/complete-purchase', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -4,6 +4,7 @@ import {
 } from '@chakra-ui/react';
 
 export default function CreateFullEventPage() {
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
   const [eventName, setEventName] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [eventTime, setEventTime] = useState('');
@@ -49,7 +50,7 @@ export default function CreateFullEventPage() {
     };
 
     try {
-      const res = await fetch('http://localhost:5000/create_full_event', {
+      const res = await fetch('${apiBaseUrl}/create_full_event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -57,7 +58,7 @@ export default function CreateFullEventPage() {
 
       const data = await res.json();
       if (res.ok) {
-        alert(`✅ Success: ${data.message}`);
+        alert(` Success: ${data.message}`);
       } else {
         alert(`❌ Error: ${data.error}`);
       }

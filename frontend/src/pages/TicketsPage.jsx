@@ -11,11 +11,13 @@ function TicketsPage() {
   const [selectedTicketId, setSelectedTicketId] = useState('');
   const [transferTo, setTransferTo] = useState('');
   const toast = useToast();
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
 
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const response = await fetch('http://localhost:5000/getUserProfile', {
+        const response = await fetch('${apiBaseUrl}/getUserProfile', {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('access_token')}`
@@ -46,7 +48,7 @@ function TicketsPage() {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/transferTickets', {
+      const response = await fetch('${apiBaseUrl}/transferTickets', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

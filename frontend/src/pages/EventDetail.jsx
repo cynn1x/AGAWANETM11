@@ -18,9 +18,17 @@ function EventDetailPage() {
   const [availableSeats, setAvailableSeats] = useState([]);
   const [priceRange, setPriceRange] = useState([0, 500]); 
   const [filterTab, setFilterTab] = useState('lowest');
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
-  useEffect(() => {
-    const socket = io('http://localhost:5000');
+
+    useEffect(() => {
+    if (!apiBaseUrl) return;
+
+    const socket = io(apiBaseUrl, {
+      path: '/socket.io',
+      transports: ['websocket', 'polling'],
+      withCredentials: true
+        });
 
     socket.on('seat_reserved', (data) => {
       if (data.event_id !== eventId) return;
@@ -49,7 +57,7 @@ function EventDetailPage() {
   useEffect(() => {
     const fetchSeats = async () => {
       try {
-        const result = await fetch(`http://localhost:5000/getAvailTicks?event_id=${eventId}`, {
+        const result = await fetch(`${apiBaseUrl}/getAvailTicks?event_id=${eventId}`, {
           headers: {
             'Accept': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('access_token')}`
@@ -104,7 +112,7 @@ function EventDetailPage() {
       const seat = rows.flat().find(seat => seat.id === id);
       if (!seat) throw new Error('Seat not found');
 
-      await fetch('http://localhost:5000/reserveTickets', {
+      await fetch('${apiBaseUrl}/reserveTickets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -133,7 +141,7 @@ function EventDetailPage() {
       const seat = rows.flat().find(seat => seat.id === id);
       if (!seat) throw new Error('Seat not found');
 
-      await fetch('http://localhost:5000/unreserveTickets');
+      await fetch('${apiBaseUrl}/unreserveTickets');
 
       setSelected(list => list.filter(item => item !== id));
       setSelectedSeats(list => list.filter(s => s.id !== id));
