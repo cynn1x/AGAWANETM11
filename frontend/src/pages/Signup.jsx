@@ -19,7 +19,7 @@ const Signup = () => {
 
 
   const [formKey, setFormKey] = useState(0);
-
+  console.log(apiBaseUrl)
   const handleSignup = async () => {
     try {
       const response = await fetch(`${apiBaseUrl}/signup`, {
