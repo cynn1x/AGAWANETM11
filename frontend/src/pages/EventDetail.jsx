@@ -1,132 +1,147 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import TesseraSeatPicker from 'tessera-seat-picker';
-import io from 'socket.io-client';
+import { io } from 'socket.io-client';
 import { useDisclosure, Button, Flex } from '@chakra-ui/react';
-import TicketPurchaseModal from '../pages/PurchasePage'; 
+import TicketPurchaseModal from '../pages/PurchasePage';
 
 function EventDetailPage() {
-  const { eventId } = useParams(); 
+  const { eventId } = useParams();
   const [rows, setRows] = useState([]);
   const [loadingRows, setLoadingRows] = useState(true);
   const [selected, setSelected] = useState([]);
   const [loading, setLoading] = useState(false);
   const [totalPrice, setTotalPrice] = useState(0);
   const [maxSeats, setMaxSeats] = useState(5);
-  const [selectedSeats, setSelectedSeats] = useState([]);  
+  const [selectedSeats, setSelectedSeats] = useState([]);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [availableSeats, setAvailableSeats] = useState([]);
-  const [priceRange, setPriceRange] = useState([0, 500]); 
+  const [priceRange, setPriceRange] = useState([0, 500]);
   const [filterTab, setFilterTab] = useState('lowest');
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
+  // Log once to confirm env
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[env] VITE_API_BASE_URL', apiBaseUrl);
+  }, [apiBaseUrl]);
 
-    useEffect(() => {
+  // Socket.IO: keep a stable connection; don't depend on `selected`
+  useEffect(() => {
     if (!apiBaseUrl) return;
 
     const socket = io(apiBaseUrl, {
       path: '/socket.io',
       transports: ['websocket', 'polling'],
-      withCredentials: true
-        });
+      withCredentials: true,
+    });
+
+    socket.on('connect', () => console.log('[socket] connected', socket.id));
+    socket.on('connect_error', (err) => console.error('[socket] connect_error', err));
 
     socket.on('seat_reserved', (data) => {
-      if (data.event_id !== eventId) return;
-
+      if (String(data.event_id) !== String(eventId)) return;
       const updatedSeats = data.seats;
 
-      setRows(prevRows =>
-        prevRows.map(row =>
-          row.map(seat => {
-            const matched = updatedSeats.find(
-              s => `${s.rowName}-${s.seatNumber}` === seat.id
-            );
+      setRows((prevRows) =>
+        prevRows.map((row) =>
+          row.map((seat) => {
+            const matched = updatedSeats.find((s) => `${s.rowName}-${s.seatNumber}` === seat.id);
             if (matched) {
               const iReservedIt = selected.includes(seat.id);
               return { ...seat, isReserved: !iReservedIt };
             }
             return seat;
-          })
-        )
+          }),
+        ),
       );
     });
 
     return () => socket.disconnect();
-  }, [eventId, selected]);
+    // Only re-run if API base or event target changes
+  }, [apiBaseUrl, eventId, selected]); // NOTE: if you still see reconnect loops, remove `selected` here.
 
+  // Fetch seat data
   useEffect(() => {
     const fetchSeats = async () => {
       try {
         const result = await fetch(`${apiBaseUrl}/getAvailTicks?event_id=${eventId}`, {
           headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            Accept: 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
           },
-          credentials: 'include'
         });
-        
+
         const data = await result.json();
         const { available_seats, taken_seats } = data;
         const reservedCount = data.user_reserved_count || 0;
-        setMaxSeats(5 - reservedCount >= 0 ? 5 - reservedCount : 0);
+        setMaxSeats(Math.max(0, 5 - reservedCount));
 
         const allSeats = [
-          ...available_seats.map(seat => ({ ...seat, isReserved: false })),
-          ...taken_seats.map(seat => ({ ...seat, isReserved: seat.status !== 'AVAILABLE' }))
+          ...available_seats.map((seat) => ({ ...seat, isReserved: false })),
+          ...taken_seats.map((seat) => ({ ...seat, isReserved: seat.status !== 'AVAILABLE' })),
         ];
-        setAvailableSeats(allSeats.filter(seat => !seat.isReserved));
+        setAvailableSeats(allSeats.filter((seat) => !seat.isReserved));
 
         const rowMap = {};
-        allSeats.forEach(seat => {
+        allSeats.forEach((seat) => {
           const row = seat.rowName || seat.row_name;
           if (!rowMap[row]) rowMap[row] = [];
           rowMap[row].push({
             id: `${row}-${seat.seatNumber}`,
             number: seat.seatNumber,
             isReserved: seat.isReserved,
-            price: seat.amount,
+            price: seat.amount, // keep price numeric
             tooltip: seat.amount ? `$${seat.amount}` : 'N/A',
             ticketId: seat.ticketId,
-            perk: seat.perk_description || null
+            perk: seat.perk_description || null,
+            rowName: row, // keep for rendering lists
+            amount: seat.amount, // for filters
+            section: seat.section,
           });
         });
 
         const rowsArray = Object.keys(rowMap)
           .sort()
-          .map(rowName => rowMap[rowName].sort((a, b) => a.number - b.number));
+          .map((rowName) => rowMap[rowName].sort((a, b) => a.number - b.number));
 
         setRows(rowsArray);
         setLoadingRows(false);
-
       } catch (error) {
         console.error('Error fetching seats:', error);
         setLoadingRows(false);
       }
     };
-    fetchSeats();
-  }, [eventId]);
+    if (apiBaseUrl) fetchSeats();
+  }, [apiBaseUrl, eventId]);
 
+  // Reserve
   const addSeatCallback = async ({ row, number, id }, addCb) => {
     setLoading(true);
     try {
-      const seat = rows.flat().find(seat => seat.id === id);
+      const seat = rows.flat().find((s) => s.id === id);
       if (!seat) throw new Error('Seat not found');
 
-      await fetch(`${apiBaseUrl}/reserveTickets`, {
+      const resp = await fetch(`${apiBaseUrl}/reserveTickets`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`
+          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
         },
         body: JSON.stringify({
           event_id: eventId,
-          seats: [{ rowName: row, seatNumber: number }]
-        })
+          seats: [{ rowName: row, seatNumber: number }],
+        }),
       });
 
-      setSelected(prev => [...prev, id]);        
-      setSelectedSeats(prev => [...prev, seat]);  
-      setTotalPrice(prev => prev + seat.price);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Reserve failed (${resp.status})`);
+      }
+
+      setSelected((prev) => [...prev, id]);
+      setSelectedSeats((prev) => [...prev, seat]);
+      setTotalPrice((prev) => prev + (seat.price || 0));
       addCb(row, number, id, 'Added to cart');
     } catch (error) {
       console.error('Error reserving seat:', error);
@@ -135,17 +150,33 @@ function EventDetailPage() {
     }
   };
 
+  // Unreserve
   const removeSeatCallback = async ({ row, number, id }, removeCb) => {
     setLoading(true);
     try {
-      const seat = rows.flat().find(seat => seat.id === id);
+      const seat = rows.flat().find((s) => s.id === id);
       if (!seat) throw new Error('Seat not found');
 
-      await fetch(`${apiBaseUrl}/unreserveTickets`);
+      const resp = await fetch(`${apiBaseUrl}/unreserveTickets`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+        },
+        body: JSON.stringify({
+          event_id: eventId,
+          seats: [{ rowName: row, seatNumber: number }],
+        }),
+      });
 
-      setSelected(list => list.filter(item => item !== id));
-      setSelectedSeats(list => list.filter(s => s.id !== id));
-      setTotalPrice(prev => prev - seat.price);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Unreserve failed (${resp.status})`);
+      }
+
+      setSelected((list) => list.filter((item) => item !== id));
+      setSelectedSeats((list) => list.filter((s) => s.id !== id));
+      setTotalPrice((prev) => prev - (seat.price || 0));
       removeCb(row, number);
     } catch (error) {
       console.error('Error unreserving seat:', error);
@@ -154,87 +185,169 @@ function EventDetailPage() {
     }
   };
 
-  const displayRows = rows.map(row =>
-    row.map(seat => selected.includes(seat.id) ? { ...seat, isReserved: false } : seat)
+  const displayRows = rows.map((row) =>
+    row.map((seat) => (selected.includes(seat.id) ? { ...seat, isReserved: false } : seat)),
   );
 
   const filteredSeats = availableSeats
-    .filter(seat => seat.amount >= priceRange[0] && seat.amount <= priceRange[1])
+    .filter((seat) => seat.amount >= priceRange[0] && seat.amount <= priceRange[1])
     .sort((a, b) => {
       if (filterTab === 'lowest') return a.amount - b.amount;
-      if (filterTab === 'best') return a.rowName.localeCompare(b.rowName);
+      if (filterTab === 'best') return String(a.rowName).localeCompare(String(b.rowName));
       return 0;
     });
 
-  return (
-    loadingRows ? (
-      <div>Loading seat map...</div>
-    ) : (
-      <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
-        <div style={{ width: '300px', flexShrink: 0 }}>
-          <div style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '8px' }}>
-            <h4 style={{ fontWeight: 'bold', marginBottom: '1rem' }}>Filters</h4>
-            <label>Price Range:</label>
-            <div style={{ margin: '0.5rem 0' }}>
-              <input type="range" min="0" max="500" value={priceRange[0]} onChange={e => setPriceRange([+e.target.value, priceRange[1]])} />
-              <input type="range" min="0" max="500" value={priceRange[1]} onChange={e => setPriceRange([priceRange[0], +e.target.value])} />
-              <div>${priceRange[0]} — ${priceRange[1]}+</div>
+  return loadingRows ? (
+    <div>Loading seat map...</div>
+  ) : (
+    <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
+      <div style={{ width: '300px', flexShrink: 0 }}>
+        <div style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '8px' }}>
+          <h4 style={{ fontWeight: 'bold', marginBottom: '1rem' }}>Filters</h4>
+          <label>Price Range:</label>
+          <div style={{ margin: '0.5rem 0' }}>
+            <input
+              type="range"
+              min="0"
+              max="500"
+              value={priceRange[0]}
+              onChange={(e) => setPriceRange([+e.target.value, priceRange[1]])}
+            />
+            <input
+              type="range"
+              min="0"
+              max="500"
+              value={priceRange[1]}
+              onChange={(e) => setPriceRange([priceRange[0], +e.target.value])}
+            />
+            <div>${priceRange[0]} — ${priceRange[1]}+</div>
+          </div>
+          <div style={{ display: 'flex', borderBottom: '2px solid #ddd', marginTop: '1rem' }}>
+            <div
+              onClick={() => setFilterTab('lowest')}
+              style={{
+                flex: 1,
+                textAlign: 'center',
+                padding: '0.5rem',
+                cursor: 'pointer',
+                borderBottom: filterTab === 'lowest' ? '2px solid blue' : 'none',
+                fontWeight: filterTab === 'lowest' ? 'bold' : 'normal',
+              }}
+            >
+              LOWEST PRICE
             </div>
-            <div style={{ display: 'flex', borderBottom: '2px solid #ddd', marginTop: '1rem' }}>
-              <div onClick={() => setFilterTab('lowest')} style={{ flex: 1, textAlign: 'center', padding: '0.5rem', cursor: 'pointer', borderBottom: filterTab === 'lowest' ? '2px solid blue' : 'none', fontWeight: filterTab === 'lowest' ? 'bold' : 'normal' }}>LOWEST PRICE</div>
-              <div onClick={() => setFilterTab('best')} style={{ flex: 1, textAlign: 'center', padding: '0.5rem', cursor: 'pointer', borderBottom: filterTab === 'best' ? '2px solid blue' : 'none', fontWeight: filterTab === 'best' ? 'bold' : 'normal' }}>BEST SEATS</div>
+            <div
+              onClick={() => setFilterTab('best')}
+              style={{
+                flex: 1,
+                textAlign: 'center',
+                padding: '0.5rem',
+                cursor: 'pointer',
+                borderBottom: filterTab === 'best' ? '2px solid blue' : 'none',
+                fontWeight: filterTab === 'best' ? 'bold' : 'normal',
+              }}
+            >
+              BEST SEATS
             </div>
           </div>
+        </div>
 
-          <div style={{ maxHeight: '600px', overflowY: 'auto', marginTop: '1rem', borderRadius: '8px', border: '1px solid #ddd' }}>
-            <h4>Available Seats ({filteredSeats.length}):</h4>
-            {filteredSeats.map(seat => {
-              const isSelected = selectedSeats.some(s => s.ticketId === seat.ticketId);
-              return (
-                <div key={seat.ticketId} onClick={() => {
-                  if (isSelected) return;
-                  const found = rows.flat().find(s => s.ticketId === seat.ticketId);
+        <div
+          style={{
+            maxHeight: '600px',
+            overflowY: 'auto',
+            marginTop: '1rem',
+            borderRadius: '8px',
+            border: '1px solid #ddd',
+          }}
+        >
+          <h4>Available Seats ({filteredSeats.length}):</h4>
+          {filteredSeats.map((seat) => {
+            const isSelected = selectedSeats.some((s) => s.ticketId === seat.ticketId);
+            return (
+              <div
+                key={seat.ticketId}
+                onClick={() => {
+                  if (isSelected || selectedSeats.length >= maxSeats) return;
+                  const found = rows.flat().find((s) => s.ticketId === seat.ticketId);
                   if (found) {
-                    const payload = { row: found.id.split('-')[0], number: found.number, id: found.id };
+                    const payload = {
+                      row: found.id.split('-')[0],
+                      number: found.number,
+                      id: found.id,
+                    };
                     addSeatCallback(payload, () => {});
                   }
-                }} style={{ marginBottom: '0.5rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem', cursor: isSelected ? 'default' : 'pointer', background: isSelected ? '#d4edda' : '#f9f9f9', borderRadius: '4px', transition: 'background 0.2s' }} onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#e6f7ff'; }} onMouseLeave={e => { e.currentTarget.style.background = isSelected ? '#d4edda' : '#f9f9f9'; }}>
-                  <div style={{ fontWeight: 'bold' }}>Sec {seat.section || 'GA'} · Row {seat.rowName} · Seat {seat.seatNumber}</div>
-                  <div style={{ fontSize: '0.9rem', color: '#555' }}>Standard Adult</div>
-                  <div style={{ fontWeight: 'bold', color: '#0056b3' }}>${seat.amount.toFixed(2)}</div>
-                  {seat.perk && <div style={{ fontSize: '0.8rem', color: 'green', marginTop: '0.3rem' }}>🎉 {seat.perk}</div>}
+                }}
+                style={{
+                  marginBottom: '0.5rem',
+                  borderBottom: '1px solid #eee',
+                  paddingBottom: '0.5rem',
+                  cursor: isSelected || selectedSeats.length >= maxSeats ? 'not-allowed' : 'pointer',
+                  background: isSelected ? '#d4edda' : '#f9f9f9',
+                  borderRadius: '4px',
+                  transition: 'background 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected && selectedSeats.length < maxSeats) e.currentTarget.style.background = '#e6f7ff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = isSelected ? '#d4edda' : '#f9f9f9';
+                }}
+              >
+                <div style={{ fontWeight: 'bold' }}>
+                  Sec {seat.section || 'GA'} · Row {seat.rowName} · Seat {seat.seatNumber}
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div style={{ marginTop: '2rem', border: '1px solid #ddd', borderRadius: '8px', padding: '1rem' }}>
-          <h4 style={{ fontWeight: 'bold', marginBottom: '1rem' }}>Your Selected Tickets ({selectedSeats.length}):</h4>
-          {selectedSeats.length === 0 ? (
-            <div>No seats selected yet.</div>
-          ) : (
-            selectedSeats.map(seat => (
-              <div key={seat.ticketId} style={{ marginBottom: '0.5rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>
-                <div style={{ fontWeight: 'bold' }}>Sec {seat.section || 'GA'} · Row {seat.rowName} · Seat {seat.seatNumber}</div>
-                <div style={{ fontSize: '0.9rem', color: '#555' }}>${seat.price.toFixed(2)}</div>
-                {seat.perk && <div style={{ fontSize: '0.8rem', color: 'green' }}>🎁 {seat.perk}</div>}
+                <div style={{ fontSize: '0.9rem', color: '#555' }}>Standard Adult</div>
+                <div style={{ fontWeight: 'bold', color: '#0056b3' }}>${seat.amount.toFixed(2)}</div>
+                {seat.perk && (
+                  <div style={{ fontSize: '0.8rem', color: 'green', marginTop: '0.3rem' }}>🎉 {seat.perk}</div>
+                )}
               </div>
-            ))
-          )}
-        </div>
-
-        <div style={{ flex: 1 }}>
-          <TesseraSeatPicker addSeatCallback={addSeatCallback} removeSeatCallback={removeSeatCallback} rows={displayRows} maxReservableSeats={maxSeats} alpha visible loading={loading} />
-          <div style={{ marginTop: '20px', padding: '40px'}}>
-            <Flex justifyContent="flex-end">
-              <Button colorScheme="teal" onClick={onOpen} disabled={selected.length === 0}>Checkout</Button>
-            </Flex>
-            <TicketPurchaseModal isOpen={isOpen} onClose={onClose} selectedSeats={selectedSeats} totalAmount={totalPrice} />
-          </div>
+            );
+          })}
         </div>
       </div>
-    )
+
+      <div style={{ marginTop: '2rem', border: '1px solid #ddd', borderRadius: '8px', padding: '1rem' }}>
+        <h4 style={{ fontWeight: 'bold', marginBottom: '1rem' }}>
+          Your Selected Tickets ({selectedSeats.length}):
+        </h4>
+        {selectedSeats.length === 0 ? (
+          <div>No seats selected yet.</div>
+        ) : (
+          selectedSeats.map((seat) => (
+            <div key={seat.ticketId} style={{ marginBottom: '0.5rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>
+              <div style={{ fontWeight: 'bold' }}>
+                Sec {seat.section || 'GA'} · Row {seat.rowName} · Seat {seat.seatNumber}
+              </div>
+              <div style={{ fontSize: '0.9rem', color: '#555' }}>${(seat.price || 0).toFixed(2)}</div>
+              {seat.perk && <div style={{ fontSize: '0.8rem', color: 'green' }}>🎁 {seat.perk}</div>}
+            </div>
+          ))
+        )}
+      </div>
+
+      <div style={{ flex: 1 }}>
+        <TesseraSeatPicker
+          addSeatCallback={addSeatCallback}
+          removeSeatCallback={removeSeatCallback}
+          rows={displayRows}
+          maxReservableSeats={maxSeats}
+          alpha
+          visible
+          loading={loading}
+        />
+        <div style={{ marginTop: '20px', padding: '40px' }}>
+          <Flex justifyContent="flex-end">
+            <Button colorScheme="teal" onClick={onOpen} disabled={selected.length === 0}>
+              Checkout
+            </Button>
+          </Flex>
+          <TicketPurchaseModal isOpen={isOpen} onClose={onClose} selectedSeats={selectedSeats} totalAmount={totalPrice} />
+        </div>
+      </div>
+    </div>
   );
 }
 

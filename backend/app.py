@@ -33,15 +33,21 @@ app.config["JWT_SECRET_KEY"] = "ayush-secret"  # Change this!
 jwt = JWTManager(app)
 
 # >>> NEW: Set your exact frontend origin (no trailing slash)
-FRONTEND_ORIGIN = "https://ayushtessera.talha.academy"
+from flask_cors import CORS
 
-# >>> NEW: One explicit CORS config instead of two implicit calls
+ALLOWED_ORIGINS = [
+    "https://ayushtessera.talha.academy",
+    "http://localhost:5173",
+    # add "https://www.ayushtessera.talha.academy" if you ever use www
+]
+
 CORS(
     app,
-    resources={r"/*": {"origins": FRONTEND_ORIGIN}},
-    supports_credentials=True,
-    methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allow_headers=['Content-Type', 'Authorization']
+    origins=ALLOWED_ORIGINS,            # <- whitelist
+    supports_credentials=True,          # <- needed if you send cookies/Authorization
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+    expose_headers=[],                  # add if you need to read custom response headers
 )
 
 # >>> NEW: Preflight short-circuit BEFORE any other handlers/JWT

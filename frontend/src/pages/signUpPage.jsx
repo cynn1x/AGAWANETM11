@@ -15,7 +15,7 @@ const SignupPage = () => {
     username: '',
     password: ''
   });
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+  
   const [formKey, setFormKey] = useState(0); // for reset
 
   const handleRegister = async () => {
