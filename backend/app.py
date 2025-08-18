@@ -35,47 +35,48 @@ jwt = JWTManager(app)
 # >>> NEW: Set your exact frontend origin (no trailing slash)
 from flask_cors import CORS
 
-ALLOWED_ORIGINS = [
+# near app = Flask(__name__
+ALLOWED_ORIGINS = {
     "https://ayushtessera.talha.academy",
     "http://localhost:5173",
-    # add "https://www.ayushtessera.talha.academy" if you ever use www
-]
+}
 
-CORS(
-    app,
-    origins=ALLOWED_ORIGINS,            # <- whitelist
-    supports_credentials=True,          # <- needed if you send cookies/Authorization
-    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
-    expose_headers=[],                  # add if you need to read custom response headers
-)
+# Avoid trailing-slash redirects on OPTIONS
+app.url_map.strict_slashes = False
 
-# >>> NEW: Preflight short-circuit BEFORE any other handlers/JWT
+# Universal preflight handler (runs before any route/blueprint/JWT)
 @app.before_request
-def handle_preflight():
-    if request.method == 'OPTIONS':
-        return _cors_preflight_ok()
+def _cors_preflight():
+    if request.method == "OPTIONS":
+        origin = request.headers.get("Origin", "")
+        if origin in ALLOWED_ORIGINS:
+            # echo back what the browser asked to use
+            acrm = request.headers.get("Access-Control-Request-Method", "GET, POST, PUT, DELETE, OPTIONS")
+            acrh = request.headers.get("Access-Control-Request-Headers", "Content-Type, Authorization")
+            resp = make_response("", 204)
+            resp.headers["Access-Control-Allow-Origin"] = origin
+            resp.headers["Access-Control-Allow-Methods"] = acrm
+            resp.headers["Access-Control-Allow-Headers"] = acrh
+            resp.headers["Access-Control-Allow-Credentials"] = "true"
+            resp.headers["Vary"] = "Origin"
+            return resp
+        # Not an allowed origin -> no CORS headers
+        return ("", 204)
 
-def _cors_preflight_ok():
-    resp = make_response('', 204)
-    resp.headers['Access-Control-Allow-Origin'] = FRONTEND_ORIGIN
-    resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-    resp.headers['Access-Control-Allow-Credentials'] = 'true'
-    resp.headers['Vary'] = 'Origin'
-    return resp
-
-# >>> NEW: Ensure **all** responses include CORS headers for your origin
+# Ensure actual responses carry CORS, too
 @app.after_request
-def add_cors_headers(resp):
-    origin = request.headers.get('Origin')
-    if origin == FRONTEND_ORIGIN:
-        resp.headers['Access-Control-Allow-Origin'] = origin
-        resp.headers['Access-Control-Allow-Credentials'] = 'true'
-        resp.headers.setdefault('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        resp.headers.setdefault('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        resp.headers['Vary'] = 'Origin'
+def _add_cors(resp):
+    origin = request.headers.get("Origin", "")
+    if origin in ALLOWED_ORIGINS:
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Credentials"] = "true"
+        # keep Vary so caches don’t mix origins
+        resp.headers["Vary"] = "Origin"
+        # If your client sends custom headers later, this echo helps:
+        resp.headers.setdefault("Access-Control-Allow-Headers", request.headers.get("Access-Control-Request-Headers", "Content-Type, Authorization"))
+        resp.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
     return resp
+
 
 # >>> NEW: Return proper CORS on auth errors (match your origin, not "*")
 @jwt.unauthorized_loader
@@ -101,6 +102,23 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+def ensure_schema():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.executescript("""
+    CREATE TABLE IF NOT EXISTS Users (
+      user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      email    TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      is_admin INTEGER NOT NULL DEFAULT 0
+    );
+    """)
+    conn.commit()
+    conn.close()
+
+ensure_schema()
+
 def cleanup_expired_reservations():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -122,35 +140,50 @@ def run_scheduler():
 # ------------------------------------------------------------------
 # >>> NEW: Public /signup route + preflight (OPTIONS handled globally)
 # ------------------------------------------------------------------
+import sqlite3
+
 @app.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json() or {}
-    email = data.get('email')
-    username = data.get('username')
+    email = (data.get('email') or '').strip()
+    username = (data.get('username') or '').strip()
     password = data.get('password')
 
-    if not all([email, username, password]):
+    if not email or not username or not password:
         return jsonify({'error': 'email, username, password required'}), 400
 
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cur = conn.cursor()
 
-        cursor.execute('SELECT 1 FROM Users WHERE username = ? OR email = ?', (username, email))
-        if cursor.fetchone():
+        # Pre-check (helps UX, but not sufficient alone)
+        cur.execute('SELECT 1 FROM Users WHERE lower(username)=lower(?) OR lower(email)=lower(?)',
+                    (username, email))
+        if cur.fetchone():
             return jsonify({'error': 'User already exists'}), 409
 
         pwd_hash = generate_password_hash(password)
-        cursor.execute(
+        cur.execute(
             'INSERT INTO Users (username, email, password_hash, is_admin) VALUES (?, ?, ?, ?)',
             (username, email, pwd_hash, 0)
         )
         conn.commit()
         return jsonify({'message': 'Signup successful'}), 201
+
+    except sqlite3.IntegrityError:
+        # Catch UNIQUE constraint violations as 409 (conflict)
+        return jsonify({'error': 'User already exists'}), 409
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback; traceback.print_exc()
+        # Surface a concise error for debugging (optional)
+        return jsonify({'error': f'server error: {type(e).__name__}'}), 500
+
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 @app.route('/events', methods=['GET'])
 def get_events():
