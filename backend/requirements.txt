@@ -10,3 +10,4 @@ certifi
 python-socketio
 python-engineio
 gunicorn
+eventlet>=0.36
