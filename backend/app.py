@@ -684,22 +684,49 @@ def unreserveTickets():
 @jwt_required()
 def create_payment_intent():
     try:
-        data = request.json
-        amount = data.get('amount')
-        if not amount:
-            return jsonify({"error": "Missing amount"}), 400
+        data = request.get_json(silent=True) or {}
+        raw_amount = data.get('amount')
+
+        # Coerce to integer cents robustly
+        amount_cents = None
+        try:
+            if isinstance(raw_amount, str):
+                # support "39.99" or "3999"
+                amount_cents = int(round(float(raw_amount) * 100)) if '.' in raw_amount else int(raw_amount)
+            elif isinstance(raw_amount, (int, float)):
+                # if float dollars were sent, treat as dollars; if already cents, this still works
+                amount_cents = int(round(float(raw_amount)))
+            # else leave as None
+        except Exception:
+            amount_cents = None
+
+        # Stripe minimum for USD is 50 cents
+        if not isinstance(amount_cents, int) or amount_cents < 50:
+            return jsonify({"error": "Invalid amount. Send integer cents (>= 50)."}), 400
 
         current_user = get_jwt_identity()
 
-        payment_intent = stripe.PaymentIntent.create(
-            amount=amount,
+        pi = stripe.PaymentIntent.create(
+            amount=amount_cents,
             currency='usd',
             metadata={'user': current_user}
         )
-        return jsonify({'clientSecret': payment_intent.client_secret}), 200
+        return jsonify({'clientSecret': pi.client_secret}), 200
+
+    except stripe.error.CardError as e:
+        return jsonify({"error": e.user_message or str(e)}), 402
+    except stripe.error.InvalidRequestError as e:
+        # e.g., "Invalid integer: amount"
+        return jsonify({"error": e.user_message or str(e)}), 400
+    except stripe.error.AuthenticationError:
+        return jsonify({"error": "Stripe API key invalid"}), 500
+    except stripe.error.APIConnectionError:
+        return jsonify({"error": "Network error talking to Stripe"}), 502
+    except stripe.error.StripeError as e:
+        return jsonify({"error": f"Stripe error: {str(e)}"}), 502
     except Exception as e:
-        print("[ERROR] /create-payment-intent failed:", e)
-        return jsonify({"error": str(e)}), 500
+        import traceback; traceback.print_exc()
+        return jsonify({"error": "Server error creating PaymentIntent"}), 500
 
 @app.route('/complete-purchase', methods=['POST'])
 @jwt_required()
