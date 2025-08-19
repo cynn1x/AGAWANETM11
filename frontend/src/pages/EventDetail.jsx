@@ -20,14 +20,8 @@ function EventDetailPage() {
   const [filterTab, setFilterTab] = useState('lowest');
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
-  // Log once to confirm env
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log('[env] VITE_API_BASE_URL', apiBaseUrl);
-  }, [apiBaseUrl]);
-
   // Socket.IO: keep a stable connection; don't depend on `selected`
-  useEffect(() => {
+ /* useEffect(() => {
     if (!apiBaseUrl) return;
 
     const socket = io(apiBaseUrl, {
@@ -60,7 +54,7 @@ function EventDetailPage() {
     return () => socket.disconnect();
     // Only re-run if API base or event target changes
   }, [apiBaseUrl, eventId, selected]); // NOTE: if you still see reconnect loops, remove `selected` here.
-
+*/
   // Fetch seat data
   useEffect(() => {
     const fetchSeats = async () => {
