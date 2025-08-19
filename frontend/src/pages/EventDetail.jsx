@@ -4,6 +4,7 @@ import TesseraSeatPicker from 'tessera-seat-picker';
 import { io } from 'socket.io-client';
 import { useDisclosure, Button, Flex } from '@chakra-ui/react';
 import TicketPurchaseModal from '../pages/PurchasePage';
+import { initialState } from '@react-login-page/page4';
 
 function EventDetailPage() {
   const { eventId } = useParams();
@@ -19,6 +20,7 @@ function EventDetailPage() {
   const [priceRange, setPriceRange] = useState([0, 500]);
   const [filterTab, setFilterTab] = useState('lowest');
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+  const [intitialLoadComplete, setInitLoadComplete] = useState(false)
 
   // Socket.IO: keep a stable connection; don't depend on `selected`
   useEffect(() => {
@@ -53,7 +55,7 @@ function EventDetailPage() {
 
     return () => socket.disconnect();
     // Only re-run if API base or event target changes
-  }, [apiBaseUrl, eventId]); // NOTE: if you still see reconnect loops, remove `selected` here.
+  }, [intitialLoadComplete]); // NOTE: if you still see reconnect loops, remove `selected` here.
 
   // Fetch seat data
   useEffect(() => {
@@ -101,6 +103,7 @@ function EventDetailPage() {
 
         setRows(rowsArray);
         setLoadingRows(false);
+        setInitLoadComplete(true)
       } catch (error) {
         console.error('Error fetching seats:', error);
         setLoadingRows(false);
