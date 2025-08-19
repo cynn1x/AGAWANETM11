@@ -21,7 +21,7 @@ function EventDetailPage() {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
   // Socket.IO: keep a stable connection; don't depend on `selected`
- /* useEffect(() => {
+  useEffect(() => {
     if (!apiBaseUrl) return;
 
     const socket = io(apiBaseUrl, {
@@ -36,9 +36,9 @@ function EventDetailPage() {
     socket.on('seat_reserved', (data) => {
       if (String(data.event_id) !== String(eventId)) return;
       const updatedSeats = data.seats;
-
-      setRows((prevRows) =>
-        prevRows.map((row) =>
+      console.log(data)
+      /* setRows((prevRows) =>
+         prevRows.map((row) =>
           row.map((seat) => {
             const matched = updatedSeats.find((s) => `${s.rowName}-${s.seatNumber}` === seat.id);
             if (matched) {
@@ -48,13 +48,13 @@ function EventDetailPage() {
             return seat;
           }),
         ),
-      );
+       );*/
     });
 
     return () => socket.disconnect();
     // Only re-run if API base or event target changes
-  }, [apiBaseUrl, eventId, selected]); // NOTE: if you still see reconnect loops, remove `selected` here.
-*/
+  }, [apiBaseUrl, eventId]); // NOTE: if you still see reconnect loops, remove `selected` here.
+
   // Fetch seat data
   useEffect(() => {
     const fetchSeats = async () => {
