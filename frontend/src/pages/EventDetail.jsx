@@ -39,7 +39,7 @@ function EventDetailPage() {
       if (String(data.event_id) !== String(eventId)) return;
       const updatedSeats = data.seats;
       console.log(data)
-      /* setRows((prevRows) =>
+      setRows((prevRows) =>
          prevRows.map((row) =>
           row.map((seat) => {
             const matched = updatedSeats.find((s) => `${s.rowName}-${s.seatNumber}` === seat.id);
@@ -50,7 +50,7 @@ function EventDetailPage() {
             return seat;
           }),
         ),
-       );*/
+       );
     });
 
     return () => socket.disconnect();
