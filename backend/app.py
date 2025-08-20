@@ -26,7 +26,8 @@ import os
 app = Flask(__name__)  # FIX: use 'app', not 'pp'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-stripe.api_key = "pk_test_51RiFwE018awpSg5sfVM7S0gqjY4P0d3ruHSZBtPDS13zC4SnNAibpj4ht2q603Iq4lbGq5wFGiZ6sWa5kUm6lodU00nn4rJ5Ka"
+stripe.api_key = "sk_test_51RiFwE018awpSg5seKq3P9tXMwSCCbK1GCncgsVf0L9YOxZsNYf4slYGUJe7SikU4fF4Pn6IeUaMbiu8DieiWPqD00EPFdHUpH"
+
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
@@ -709,50 +710,62 @@ def unreserveTickets():
 @app.route('/create-payment-intent', methods=['POST'])
 @jwt_required()
 def create_payment_intent():
+    print("=== PAYMENT INTENT ENDPOINT HIT ===")
+    
     try:
         data = request.get_json(silent=True) or {}
         raw_amount = data.get('amount')
-
-        # Coerce to integer cents robustly
+        
+        print(f"Raw amount received: {raw_amount}")
+        print(f"Data received: {data}")
+        
+        # Your existing amount calculation logic...
         amount_cents = None
         try:
             if isinstance(raw_amount, str):
-                # support "39.99" or "3999"
                 amount_cents = int(round(float(raw_amount) * 100)) if '.' in raw_amount else int(raw_amount)
             elif isinstance(raw_amount, (int, float)):
-                # if float dollars were sent, treat as dollars; if already cents, this still works
                 amount_cents = int(round(float(raw_amount)))
-            # else leave as None
-        except Exception:
+        except Exception as calc_error:
+            print(f"Amount calculation error: {calc_error}")
             amount_cents = None
 
-        # Stripe minimum for USD is 50 cents
+        print(f"Calculated amount_cents: {amount_cents}")
+
         if not isinstance(amount_cents, int) or amount_cents < 50:
+            print(f"Invalid amount check failed: {amount_cents}")
             return jsonify({"error": "Invalid amount. Send integer cents (>= 50)."}), 400
 
         current_user = get_jwt_identity()
+        print(f"Creating PaymentIntent for user: {current_user}, amount: {amount_cents}")
 
+        # This is where the Stripe call happens
         pi = stripe.PaymentIntent.create(
             amount=amount_cents,
             currency='usd',
             metadata={'user': current_user}
         )
+        
+        print(f"PaymentIntent created successfully: {pi.id}")
         return jsonify({'clientSecret': pi.client_secret}), 200
 
-    except stripe.error.CardError as e:
-        return jsonify({"error": e.user_message or str(e)}), 402
-    except stripe.error.InvalidRequestError as e:
-        # e.g., "Invalid integer: amount"
-        return jsonify({"error": e.user_message or str(e)}), 400
-    except stripe.error.AuthenticationError:
-        return jsonify({"error": "Stripe API key invalid"}), 500
-    except stripe.error.APIConnectionError:
+    except stripe.error.APIConnectionError as e:
+        print(f"Stripe API Connection Error: {str(e)}")
         return jsonify({"error": "Network error talking to Stripe"}), 502
-    except stripe.error.StripeError as e:
-        return jsonify({"error": f"Stripe error: {str(e)}"}), 502
     except Exception as e:
+        print(f"General error: {str(e)}")
         import traceback; traceback.print_exc()
         return jsonify({"error": "Server error creating PaymentIntent"}), 500
+    
+@app.route('/verify-stripe', methods=['GET'])
+def verify_stripe():
+    try:
+        account = stripe.Account.retrieve()
+        return jsonify({"status": "success", "account_id": account.id})
+    except stripe.error.AuthenticationError as e:
+        return jsonify({"status": "error", "message": "Invalid API key"}), 401
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/complete-purchase', methods=['POST'])
 @jwt_required()
