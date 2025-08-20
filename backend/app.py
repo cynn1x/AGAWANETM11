@@ -23,19 +23,20 @@ import time
 import requests
 import os
 
-app = Flask(__name__)
+app = Flask(__name__)  # FIX: use 'app', not 'pp'
 socketio = SocketIO(app, cors_allowed_origins="*")
-stripe.api_key = 'sk_test_51RiFwE018awpSg5seKq3P9tXMwSCCbK1GCncgsVf0L9YOxZsNYf4slYGUJe7SikU4fF4Pn6IeUaMbiu8DieiWPqD00EPFdHUpH'
+
+stripe.api_key = "sk_test_51RiFwE018awpSg5seKq3P9tXMwSCCbK1GCncgsVf0L9YOxZsNYf4slYGUJe7SikU4fF4Pn6IeUaMbiu8DieiWPqD00EPFdHUpH"
+
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
-# Setup the Flask-JWT-Extended extension
-app.config["JWT_SECRET_KEY"] = "ayush-secret"  # Change this!
+# JWT
+app.config["JWT_SECRET_KEY"] = "ayush-secret"  
 jwt = JWTManager(app)
 
-# >>> NEW: Set your exact frontend origin (no trailing slash)
-from flask_cors import CORS
-
-# near app = Flask(__name__
+# -----------------------
+# CORS config
+# -----------------------
 ALLOWED_ORIGINS = {
     "https://ayushtessera.talha.academy",
     "http://localhost:5173",
@@ -44,13 +45,12 @@ ALLOWED_ORIGINS = {
 # Avoid trailing-slash redirects on OPTIONS
 app.url_map.strict_slashes = False
 
-# Universal preflight handler (runs before any route/blueprint/JWT)
+# Preflight for all routes
 @app.before_request
 def _cors_preflight():
     if request.method == "OPTIONS":
         origin = request.headers.get("Origin", "")
         if origin in ALLOWED_ORIGINS:
-            # echo back what the browser asked to use
             acrm = request.headers.get("Access-Control-Request-Method", "GET, POST, PUT, DELETE, OPTIONS")
             acrh = request.headers.get("Access-Control-Request-Headers", "Content-Type, Authorization")
             resp = make_response("", 204)
@@ -60,43 +60,69 @@ def _cors_preflight():
             resp.headers["Access-Control-Allow-Credentials"] = "true"
             resp.headers["Vary"] = "Origin"
             return resp
-        # Not an allowed origin -> no CORS headers
+        # Not an allowed origin -> still return 204 (no CORS headers)
         return ("", 204)
 
-# Ensure actual responses carry CORS, too
+# Add CORS to actual responses
 @app.after_request
 def _add_cors(resp):
     origin = request.headers.get("Origin", "")
     if origin in ALLOWED_ORIGINS:
         resp.headers["Access-Control-Allow-Origin"] = origin
         resp.headers["Access-Control-Allow-Credentials"] = "true"
-        # keep Vary so caches don’t mix origins
         resp.headers["Vary"] = "Origin"
-        # If your client sends custom headers later, this echo helps:
-        resp.headers.setdefault("Access-Control-Allow-Headers", request.headers.get("Access-Control-Request-Headers", "Content-Type, Authorization"))
+        resp.headers.setdefault(
+            "Access-Control-Allow-Headers",
+            request.headers.get("Access-Control-Request-Headers", "Content-Type, Authorization")
+        )
         resp.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
     return resp
 
-
-# >>> NEW: Return proper CORS on auth errors (match your origin, not "*")
+# -----------------------
+# JWT error handlers (FIX: no undefined FRONTEND_ORIGIN)
+# -----------------------
 @jwt.unauthorized_loader
-def custom_unauthorized(err):
-    response = jsonify({'error': 'Missing or invalid JWT'})
-    response.status_code = 401
-    response.headers['Access-Control-Allow-Origin'] = FRONTEND_ORIGIN
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
-    response.headers['Vary'] = 'Origin'
-    return response
+def custom_unauthorized(err_msg):
+    # Missing or bad Authorization header
+    origin = request.headers.get("Origin", "")
+    resp = jsonify({'error': 'Missing or invalid JWT'})
+    resp.status_code = 401
+    if origin in ALLOWED_ORIGINS:
+        resp.headers['Access-Control-Allow-Origin'] = origin
+        resp.headers['Access-Control-Allow-Credentials'] = 'true'
+        resp.headers['Vary'] = 'Origin'
+    return resp
 
 @jwt.invalid_token_loader
-def custom_invalid_token(err):
-    response = jsonify({'error': 'Invalid JWT'})
-    response.status_code = 422
-    response.headers['Access-Control-Allow-Origin'] = FRONTEND_ORIGIN
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
-    response.headers['Vary'] = 'Origin'
-    return response
+def custom_invalid_token(err_msg):
+    # Malformed token
+    origin = request.headers.get("Origin", "")
+    resp = jsonify({'error': 'Invalid JWT'})
+    resp.status_code = 422
+    if origin in ALLOWED_ORIGINS:
+        resp.headers['Access-Control-Allow-Origin'] = origin
+        resp.headers['Access-Control-Allow-Credentials'] = 'true'
+        resp.headers['Vary'] = 'Origin'
+    return resp
 
+@jwt.expired_token_loader
+def custom_expired_token(jwt_header, jwt_payload):
+    origin = request.headers.get("Origin", "")
+    resp = jsonify({'error': 'Token expired'})
+    resp.status_code = 401
+    if origin in ALLOWED_ORIGINS:
+        resp.headers['Access-Control-Allow-Origin'] = origin
+        resp.headers['Access-Control-Allow-Credentials'] = 'true'
+        resp.headers['Vary'] = 'Origin'
+    return resp
+
+@app.route("/_ping", methods=["GET"])
+def ping():
+    return jsonify({"status": "ok"}), 200
+
+# -----------------------
+# DB helpers
+# -----------------------
 def get_db_connection():
     conn = sqlite3.connect('../database/tessera.db')
     conn.row_factory = sqlite3.Row
