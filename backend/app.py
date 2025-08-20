@@ -22,14 +22,32 @@ import schedule
 import time
 import requests
 import os
+import ssl
+import certifi
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 app = Flask(__name__)  # FIX: use 'app', not 'pp'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 stripe.api_key = "sk_test_51RiFwE018awpSg5seKq3P9tXMwSCCbK1GCncgsVf0L9YOxZsNYf4slYGUJe7SikU4fF4Pn6IeUaMbiu8DieiWPqD00EPFdHUpH"
 
-
 ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+# Configure requests session for Stripe to fix RecursionError
+session = requests.Session()
+retry_strategy = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+session.mount("http://", adapter)
+session.mount("https://", adapter)
+
+# Set the session for Stripe
+stripe.default_http_client = stripe.http_client.RequestsClient(session=session)
 
 # JWT
 app.config["JWT_SECRET_KEY"] = "ayush-secret"  
