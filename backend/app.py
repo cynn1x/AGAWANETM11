@@ -33,21 +33,10 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 stripe.api_key = "sk_test_51RiFwE018awpSg5seKq3P9tXMwSCCbK1GCncgsVf0L9YOxZsNYf4slYGUJe7SikU4fF4Pn6IeUaMbiu8DieiWPqD00EPFdHUpH"
 
-ssl_context = ssl.create_default_context(cafile=certifi.where())
+ssl._create_default_https_context = ssl._create_unverified_context
 
-# Configure requests session for Stripe to fix RecursionError
-session = requests.Session()
-retry_strategy = Retry(
-    total=3,
-    backoff_factor=1,
-    status_forcelist=[429, 500, 502, 503, 504],
-)
-adapter = HTTPAdapter(max_retries=retry_strategy)
-session.mount("http://", adapter)
-session.mount("https://", adapter)
 
 # Set the session for Stripe
-stripe.default_http_client = stripe.http_client.RequestsClient(session=session)
 
 # JWT
 app.config["JWT_SECRET_KEY"] = "ayush-secret"  
@@ -229,6 +218,19 @@ def signup():
             conn.close()
         except Exception:
             pass
+        
+@app.route('/test-stripe-no-auth', methods=['POST'])
+def test_stripe_no_auth():
+    try:
+        pi = stripe.PaymentIntent.create(
+            amount=5000,
+            currency='usd'
+        )
+        return jsonify({'status': 'success', 'id': pi.id})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+    
 
 @app.route('/events', methods=['GET'])
 def get_events():
