@@ -811,6 +811,18 @@ def complete_purchase():
     finally:
         conn.close()
 
+@app.route("/test-stripe")
+def test_stripe():
+    try:
+        pi = stripe.PaymentIntent.create(
+            amount=1000,  # $10.00
+            currency="usd"
+        )
+        return {"ok": True, "id": pi.id}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 500
+    
+    
 @app.route('/getUserProfile', methods=['GET'])
 @jwt_required()
 def get_user_profile():
@@ -854,6 +866,7 @@ def send_ticket_email(to_email, subject, html_content):
             "value": html_content
         }]
     }
+    
 
     response = requests.post(url, headers=headers, json=payload, verify=certifi.where())
     print("[DEBUG] Response:", response.status_code, response.text)
@@ -862,4 +875,4 @@ if __name__ == '__main__':
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.daemon = True
     scheduler_thread.start()
-    #socketio.run(app, host='0.0.0.0', port=5001, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5001, debug=True)

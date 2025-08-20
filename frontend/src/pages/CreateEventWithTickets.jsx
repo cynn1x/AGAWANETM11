@@ -60,7 +60,7 @@ export default function CreateFullEventPage() {
       if (res.ok) {
         alert(` Success: ${data.message}`);
       } else {
-        alert(`❌ Error: ${data.error}`);
+        alert(`Error: ${data.error}`);
       }
     } catch (err) {
       console.error(err);
