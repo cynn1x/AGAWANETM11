@@ -26,7 +26,7 @@ import os
 app = Flask(__name__)  # FIX: use 'app', not 'pp'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-stripe.api_key = "sk_test_51RiFwE018awpSg5seKq3P9tXMwSCCbK1GCncgsVf0L9YOxZsNYf4slYGUJe7SikU4fF4Pn6IeUaMbiu8DieiWPqD00EPFdHUpH"
+stripe.api_key = "pk_test_51RiFwE018awpSg5sfVM7S0gqjY4P0d3ruHSZBtPDS13zC4SnNAibpj4ht2q603Iq4lbGq5wFGiZ6sWa5kUm6lodU00nn4rJ5Ka"
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
